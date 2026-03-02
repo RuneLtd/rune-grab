@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/rune-grab.png" alt="rune-grab" width="80" />
+  <img src="public/rune-grab-logo.png" alt="rune-grab" width="80" />
 </p>
 
 <h1 align="center">Rune Grab</h1>
