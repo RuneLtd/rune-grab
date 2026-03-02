@@ -1,0 +1,301 @@
+import { SKIP_PREFIXES, isSourceFile } from './constants.js';
+import { resolveOriginalPosition, prewarmSourceMap } from './sourcemap.js';
+import type { ComponentInfo, ComponentFrame } from './types.js';
+
+interface SourceLoc {
+  fileName: string;
+  lineNumber: number | null;
+  columnNumber: number | null;
+  _bundledUrl?: string;
+  _bundledLine?: number;
+  _bundledCol?: number;
+}
+
+const pendingResolution = new WeakMap<
+  ComponentInfo | ComponentFrame,
+  { url: string; line: number; col: number }
+>();
+
+function isUsefulName(name: string, filePath: string | null, customSkip?: Set<string>): boolean {
+  if (!name || name.length <= 1) return false;
+  if (customSkip?.has(name)) return false;
+  if (name[0] !== name[0].toUpperCase()) return false;
+  for (const pfx of SKIP_PREFIXES) {
+    if (name.startsWith(pfx)) return false;
+  }
+  if (/^[A-Z][a-zA-Z]+\d+$/.test(name)) return false;
+  if (filePath && !isSourceFile(filePath)) return false;
+  return true;
+}
+
+function cleanFilePath(raw: string): string {
+  return raw
+    .replace(/^https?:\/\/[^/]+\//, '')
+    .replace(/^rsc:\/\/[^/]+\/[^/]+\//, '')
+    .replace(/^webpack-internal:\/\/\//, '')
+    .replace(/^\([\w-]+\)\//, '')
+    .replace(/\?.*$/, '')
+    .replace(/^\/app\//, '')
+    .replace(/^\.\//, '');
+}
+
+function parseStackForSource(stack: string | undefined): SourceLoc | null {
+  if (!stack) return null;
+  const lines = stack.split('\n');
+  for (const line of lines) {
+    const match = line.match(/\((.+):(\d+):(\d+)\)/) || line.match(/at\s+(.+):(\d+):(\d+)/);
+    if (match) {
+      const rawUrl = match[1].trim();
+      const cleaned = cleanFilePath(rawUrl);
+      if (isSourceFile(cleaned)) {
+        const bundledLine = parseInt(match[2], 10);
+        const bundledCol = parseInt(match[3], 10);
+        return {
+          fileName: cleaned,
+          lineNumber: bundledLine,
+          columnNumber: bundledCol,
+          _bundledUrl: rawUrl,
+          _bundledLine: bundledLine,
+          _bundledCol: bundledCol,
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function getSourceFromFiber(fiber: any): SourceLoc | null {
+  if (fiber._debugSource) {
+    return {
+      fileName: fiber._debugSource.fileName,
+      lineNumber: fiber._debugSource.lineNumber ?? null,
+      columnNumber: fiber._debugSource.columnNumber ?? null,
+    };
+  }
+
+  const debugStack = fiber._debugStack;
+  if (debugStack) {
+    const raw = typeof debugStack === 'string' ? debugStack : debugStack?.stack;
+    const loc = parseStackForSource(raw);
+    if (loc) {
+      const canFetchMap = loc._bundledUrl?.startsWith('http');
+      if (canFetchMap) {
+        prewarmSourceMap(loc._bundledUrl!);
+        return {
+          fileName: loc.fileName,
+          lineNumber: null,
+          columnNumber: null,
+          _bundledUrl: loc._bundledUrl,
+          _bundledLine: loc._bundledLine,
+          _bundledCol: loc._bundledCol,
+        };
+      }
+      return {
+        fileName: loc.fileName,
+        lineNumber: loc._bundledLine ?? null,
+        columnNumber: loc._bundledCol ?? null,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getReactFiber(el: Element): any | null {
+  const keys = Object.keys(el);
+  for (const key of keys) {
+    if (key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$')) {
+      return (el as any)[key];
+    }
+  }
+  return null;
+}
+
+function storePendingResolution(target: ComponentInfo | ComponentFrame, src: SourceLoc): void {
+  if (src._bundledUrl && src._bundledLine != null) {
+    pendingResolution.set(target, {
+      url: src._bundledUrl,
+      line: src._bundledLine,
+      col: src._bundledCol ?? 0,
+    });
+  }
+}
+
+function getReactComponentInfo(el: Element, customSkip?: Set<string>): ComponentInfo | null {
+  const fiber = getReactFiber(el);
+  if (!fiber) return null;
+
+  const elementSrc = getSourceFromFiber(fiber);
+  let isFirst = true;
+
+  let cur = fiber;
+  while (cur) {
+    if (cur.type && typeof cur.type === 'function') {
+      const name = cur.type.displayName || cur.type.name;
+      const src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+      const filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
+      if (name && filePath && isUsefulName(name, filePath, customSkip)) {
+        const info: ComponentInfo = {
+          name,
+          filePath,
+          line: src?.lineNumber ?? null,
+          column: src?.columnNumber ?? null,
+        };
+        if (src) storePendingResolution(info, src);
+        return info;
+      }
+      isFirst = false;
+    }
+    if (cur.type?.$$typeof) {
+      const inner = cur.type.render || cur.type.type;
+      if (inner && typeof inner === 'function') {
+        const name = inner.displayName || inner.name;
+        const src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+        const filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
+        if (name && filePath && isUsefulName(name, filePath, customSkip)) {
+          const info: ComponentInfo = {
+            name,
+            filePath,
+            line: src?.lineNumber ?? null,
+            column: src?.columnNumber ?? null,
+          };
+          if (src) storePendingResolution(info, src);
+          return info;
+        }
+        isFirst = false;
+      }
+    }
+    cur = cur.return;
+  }
+  return null;
+}
+
+function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<string>): ComponentFrame[] {
+  const fiber = getReactFiber(el);
+  if (!fiber) return [];
+
+  const elementSrc = getSourceFromFiber(fiber);
+
+  const stack: ComponentFrame[] = [];
+  const seen = new Set<string>();
+  let cur = fiber;
+  let isFirst = true;
+
+  while (cur && stack.length < maxDepth) {
+    let name: string | null = null;
+    let src: SourceLoc | null = null;
+
+    if (cur.type && typeof cur.type === 'function') {
+      name = cur.type.displayName || cur.type.name;
+      src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+    } else if (cur.type?.$$typeof) {
+      const inner = cur.type.render || cur.type.type;
+      if (inner && typeof inner === 'function') {
+        name = inner.displayName || inner.name;
+        src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+      }
+    }
+
+    let filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
+    if (name && filePath && isUsefulName(name, filePath, customSkip) && !seen.has(name)) {
+      seen.add(name);
+      const frame: ComponentFrame = { name, filePath, line: src?.lineNumber ?? null };
+      if (src) storePendingResolution(frame, src);
+      stack.push(frame);
+      isFirst = false;
+    }
+    cur = cur.return;
+  }
+  return stack;
+}
+
+function getVueComponentInfo(el: Element): ComponentInfo | null {
+  let cur: Element | null = el;
+  while (cur) {
+    const vueInstance = (cur as any).__vueParentComponent;
+    if (vueInstance) {
+      const name = vueInstance.type?.name || vueInstance.type?.__name;
+      if (name) {
+        const file = vueInstance.type?.__file ?? null;
+        return { name, filePath: file, line: null, column: null };
+      }
+    }
+    const vue2 = (cur as any).__vue__;
+    if (vue2) {
+      const name = vue2.$options?.name || vue2.$options?._componentTag;
+      if (name) {
+        const file = vue2.$options?.__file ?? null;
+        return { name, filePath: file, line: null, column: null };
+      }
+    }
+    cur = cur.parentElement;
+  }
+  return null;
+}
+
+function getSvelteComponentInfo(el: Element): ComponentInfo | null {
+  const meta = (el as any).__svelte_meta;
+  if (meta?.loc) {
+    const file = meta.loc.file;
+    const name = file ? file.split('/').pop()?.replace(/\.svelte$/, '') : null;
+    if (name) {
+      return { name, filePath: file, line: meta.loc.line ?? null, column: meta.loc.column ?? null };
+    }
+  }
+  const keys = Object.keys(el);
+  for (const key of keys) {
+    if (key.startsWith('__svelte')) {
+      return { name: 'SvelteComponent', filePath: null, line: null, column: null };
+    }
+  }
+  return null;
+}
+
+export function detectComponent(el: Element, customSkip?: Set<string>): ComponentInfo | null {
+  return getReactComponentInfo(el, customSkip)
+    || getVueComponentInfo(el)
+    || getSvelteComponentInfo(el)
+    || null;
+}
+
+export function detectComponentStack(el: Element, maxDepth = 6, customSkip?: Set<string>): ComponentFrame[] {
+  const reactStack = getReactComponentStack(el, maxDepth, customSkip);
+  if (reactStack.length > 0) return reactStack;
+
+  const info = getVueComponentInfo(el) || getSvelteComponentInfo(el);
+  if (info) {
+    return [{ name: info.name, filePath: info.filePath, line: info.line }];
+  }
+  return [];
+}
+
+export async function resolveComponentInfo(info: ComponentInfo): Promise<void> {
+  if (info.line != null) return;
+  const pending = pendingResolution.get(info);
+  if (!pending) return;
+
+  const resolved = await resolveOriginalPosition(pending.url, pending.line, pending.col);
+  if (resolved) {
+    info.line = resolved.line;
+    info.column = resolved.column;
+    if (resolved.source) {
+      info.filePath = cleanFilePath(resolved.source);
+    }
+  }
+  pendingResolution.delete(info);
+}
+
+export async function resolveComponentFrame(frame: ComponentFrame): Promise<void> {
+  if (frame.line != null) return;
+  const pending = pendingResolution.get(frame);
+  if (!pending) return;
+
+  const resolved = await resolveOriginalPosition(pending.url, pending.line, pending.col);
+  if (resolved) {
+    frame.line = resolved.line;
+    if (resolved.source) {
+      frame.filePath = cleanFilePath(resolved.source);
+    }
+  }
+  pendingResolution.delete(frame);
+}

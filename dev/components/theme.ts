@@ -1,0 +1,10 @@
+export const font = `-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif`;
+export const mono = `ui-monospace,SFMono-Regular,Menlo,monospace`;
+export const bg = '#171717';
+export const fg = '#f5f5f5';
+export const fgDim = '#a3a3a3';
+export const border = '#2e2e2e';
+export const card = '#1c1c1c';
+export const activeBg = '#f5f5f5';
+export const activeFg = '#171717';
+export const accent = '#6366f1';
