@@ -2,7 +2,7 @@
   <img src="public/rune-grab.png" alt="rune-grab" width="80" />
 </p>
 
-<h1 align="center">rune-grab</h1>
+<h1 align="center">Rune Grab</h1>
 
 <p align="center">
   Point at any element. Get the component, file path, and line number. Send it to your AI tool.
@@ -16,12 +16,12 @@
 </p>
 
 <p align="center">
-  <video src="public/demo.mp4" width="720" autoplay loop muted />
+  <img src="public/rune-grab.gif" width="720" alt="rune-grab demo" />
 </p>
 
 <p align="center">
   Works with React, Vue, Svelte, and plain HTML.<br />
-  Supports Vite, Next.js, and Webpack. Only loads in development — nothing ships to production.
+  Supports Vite, Next.js, and Webpack.
 </p>
 
 ---
@@ -31,6 +31,8 @@
 ```bash
 npx rune-grab init
 ```
+
+This adds a snippet to your app's entry file (e.g. `src/main.tsx`). Make sure it ends up in the file where your app renders. It only loads in development, nothing ships to production.
 
 Run your dev server and press **Cmd+Shift+G** to start grabbing.
 

@@ -10,7 +10,7 @@ const iifePath = join(__dirname, 'rune-grab.iife.global.js');
 const args = process.argv.slice(2);
 const command = args[0];
 
-const SNIPPET_VITE = `\n<!-- rune-grab: dev-only element grabber -->\n<script type="module">if(import.meta.env.DEV)import('rune-grab')</script>`;
+const SNIPPET_VITE = `\n// rune-grab: dev-only element grabber\nif (import.meta.env.DEV) import('rune-grab');`;
 
 const SNIPPET_NEXT_APP = `\n{/* rune-grab: dev-only element grabber */}\n{process.env.NODE_ENV === 'development' && <script src="https://unpkg.com/rune-grab/dist/rune-grab.iife.global.js" />}`;
 
@@ -22,8 +22,29 @@ type Framework = 'vite' | 'next-app' | 'next-pages' | 'webpack' | 'unknown';
 
 function detect(cwd: string): { framework: Framework; file: string | null } {
   if (existsSync(join(cwd, 'vite.config.ts')) || existsSync(join(cwd, 'vite.config.js')) || existsSync(join(cwd, 'vite.config.mts'))) {
+    // Find the JS/TS entry file referenced from index.html, or common entry paths
     const indexHtml = join(cwd, 'index.html');
-    if (existsSync(indexHtml)) return { framework: 'vite', file: indexHtml };
+    if (existsSync(indexHtml)) {
+      const html = readFileSync(indexHtml, 'utf-8');
+      const srcMatch = html.match(/src=["']\/?(src\/(?:main|index)\.[tj]sx?)["']/);
+      if (srcMatch) {
+        const entry = join(cwd, srcMatch[1]);
+        if (existsSync(entry)) return { framework: 'vite', file: entry };
+      }
+    }
+    const viteEntries = [
+      join(cwd, 'src', 'main.tsx'),
+      join(cwd, 'src', 'main.ts'),
+      join(cwd, 'src', 'main.jsx'),
+      join(cwd, 'src', 'main.js'),
+      join(cwd, 'src', 'index.tsx'),
+      join(cwd, 'src', 'index.ts'),
+      join(cwd, 'src', 'index.jsx'),
+      join(cwd, 'src', 'index.js'),
+    ];
+    for (const f of viteEntries) {
+      if (existsSync(f)) return { framework: 'vite', file: f };
+    }
   }
 
   if (existsSync(join(cwd, 'next.config.js')) || existsSync(join(cwd, 'next.config.mjs')) || existsSync(join(cwd, 'next.config.ts'))) {
@@ -64,12 +85,6 @@ function detect(cwd: string): { framework: Framework; file: string | null } {
     }
   }
 
-  const indexHtml = join(cwd, 'index.html');
-  if (existsSync(indexHtml)) {
-    const content = readFileSync(indexHtml, 'utf-8');
-    if (content.includes('import.meta')) return { framework: 'vite', file: indexHtml };
-  }
-
   return { framework: 'unknown', file: null };
 }
 
@@ -107,10 +122,10 @@ function initCommand(): void {
 
   if (framework === 'unknown' || !file) {
     console.log('\n  Could not detect your framework.\n');
-    console.log('  Add this to your HTML before </body>:\n');
-    console.log('    <script type="module">');
-    console.log('      if (import.meta.env.DEV) import(\'rune-grab\')');
-    console.log('    </script>\n');
+    console.log('  Add this to your app entry file (e.g. src/main.ts, src/index.tsx):\n');
+    console.log('    // rune-grab: dev-only element grabber');
+    console.log('    if (import.meta.env.DEV) import(\'rune-grab\')\n');
+    console.log('  This must go in the file where your app renders, not in index.html.\n');
     return;
   }
 
@@ -125,7 +140,7 @@ function initCommand(): void {
 
   switch (framework) {
     case 'vite': {
-      updated = content.replace('</body>', `${SNIPPET_VITE}\n</body>`);
+      updated = content + SNIPPET_VITE + '\n';
       break;
     }
     case 'next-app': {
@@ -157,7 +172,26 @@ function initCommand(): void {
 
   console.log(`\n  rune-grab installed for ${label}`);
   console.log(`  Modified: ${relative(cwd, file)}`);
-  console.log(`\n  Run your dev server and press Cmd+Shift+G to start grabbing.\n`);
+  console.log(`\n  Make sure this is the file where your app renders (e.g. main.tsx).`);
+  console.log(`  If not, move the snippet to the correct entry file.\n`);
+  console.log(`  Run your dev server and press Cmd+Shift+G to start grabbing.`);
+
+  // Suggest adding rune-grab serve for auto-paste
+  try {
+    const pkgPath = join(cwd, 'package.json');
+    if (existsSync(pkgPath)) {
+      const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+      const devScript = pkg.scripts?.dev || '';
+      if (devScript && !devScript.includes('rune-grab')) {
+        console.log(`\n  For auto-paste to Claude, Cursor, or Codex, update your dev script:`);
+        console.log(`\n    "dev": "rune-grab serve & ${devScript}"`);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  console.log('');
 }
 
 function relative(from: string, to: string): string {
