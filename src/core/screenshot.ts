@@ -18,11 +18,10 @@ async function getStream(): Promise<MediaStream | null> {
 
   try {
     activeStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        preferCurrentTab: true,
-      } as any,
-      audio: false,
-    });
+      video: true,
+      preferCurrentTab: true,
+      selfBrowserSurface: 'include',
+    } as any);
 
     activeStream!.getVideoTracks()[0].addEventListener('ended', () => {
       activeStream = null;
@@ -56,10 +55,8 @@ async function captureFromStream(
     await new Promise((r) => setTimeout(r, 200));
   }
 
-  const track = stream.getVideoTracks()[0];
-  const settings = track.getSettings();
-  const videoW = settings.width || video.videoWidth;
-  const videoH = settings.height || video.videoHeight;
+  const videoW = video.videoWidth;
+  const videoH = video.videoHeight;
   const scaleX = videoW / window.innerWidth;
   const scaleY = videoH / window.innerHeight;
 
@@ -100,7 +97,7 @@ export async function captureRect(
       return await captureFromStream(stream, domRect, format, quality);
     }
 
-    console.warn('[rune-grab] No screenshot method available. Use setCaptureProvider() for Electron apps.');
+    console.warn('[rune-grab] Screenshot permission was denied or unavailable. In Electron apps, use setCaptureProvider() instead.');
     return null;
   } catch (err) {
     console.warn('[rune-grab] Screenshot capture failed:', err);

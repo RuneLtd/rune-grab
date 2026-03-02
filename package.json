@@ -33,10 +33,6 @@
   "scripts": {
     "build": "tsup",
     "dev": "vite --config dev/vite.config.ts",
-    "dev:vue": "vite --config dev/test-vue/vite.config.ts",
-    "dev:svelte": "vite --config dev/test-svelte/vite.config.ts",
-    "dev:html": "vite --config dev/test-html/vite.config.ts",
-    "dev:react-pages": "vite --config dev/test-react-pages/vite.config.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
@@ -56,7 +52,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/rune-labs/rune-grab"
+    "url": "https://github.com/RuneLtd/rune-grab"
   },
   "peerDependencies": {
     "react": ">=16.8.0",

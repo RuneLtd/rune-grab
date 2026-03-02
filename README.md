@@ -1,18 +1,36 @@
-# rune-grab
+<p align="center">
+  <img src="public/rune-grab.png" alt="rune-grab" width="80" />
+</p>
 
-Point at any UI element, grab its context, and send it to Claude, Cursor, Codex, or Claude Code.
+<h1 align="center">rune-grab</h1>
 
-Works with React, Vue, Svelte, or plain HTML.
+<p align="center">
+  Point at any element. Get the component, file path, and line number. Send it to your AI tool.
+</p>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/rune-grab"><img src="https://img.shields.io/npm/v/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/rune-grab"><img src="https://img.shields.io/npm/dm/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="downloads" /></a>
+  <a href="https://bundlephobia.com/package/rune-grab"><img src="https://img.shields.io/bundlephobia/minzip/rune-grab?color=161b22&labelColor=0d1117&style=flat-square&label=gzip" alt="gzip size" /></a>
+  <a href="https://github.com/YOUR_USERNAME/rune-grab/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="license" /></a>
+</p>
+
+<p align="center">
+  <video src="public/demo.mp4" width="720" autoplay loop muted />
+</p>
+
+<p align="center">
+  Works with React, Vue, Svelte, and plain HTML.<br />
+  Supports Vite, Next.js, and Webpack. Only loads in development — nothing ships to production.
+</p>
+
+---
 
 ## Install
-
-Run this from your project root:
 
 ```bash
 npx rune-grab init
 ```
-
-Supports Vite, Next.js, and Webpack. Only loads in development — nothing ships to production.
 
 Run your dev server and press **Cmd+Shift+G** to start grabbing.
 
