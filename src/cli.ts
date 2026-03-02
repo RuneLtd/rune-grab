@@ -10,7 +10,7 @@ const iifePath = join(__dirname, 'rune-grab.iife.global.js');
 const args = process.argv.slice(2);
 const command = args[0];
 
-const SNIPPET_VITE = `\n// rune-grab: dev-only element grabber\nif (import.meta.env.DEV) import('rune-grab');`;
+const SNIPPET_VITE = `\n// rune-grab: dev-only element grabber\nif ((import.meta as any).env?.DEV) import('rune-grab');`;
 
 const SNIPPET_NEXT_APP = `\n{/* rune-grab: dev-only element grabber */}\n{process.env.NODE_ENV === 'development' && <script src="https://unpkg.com/rune-grab/dist/rune-grab.iife.global.js" />}`;
 
@@ -26,7 +26,7 @@ function detect(cwd: string): { framework: Framework; file: string | null } {
     const indexHtml = join(cwd, 'index.html');
     if (existsSync(indexHtml)) {
       const html = readFileSync(indexHtml, 'utf-8');
-      const srcMatch = html.match(/src=["']\/?(src\/(?:main|index)\.[tj]sx?)["']/);
+      const srcMatch = html.match(/src=["']\/?(.+?\.[tj]sx?)["']/);
       if (srcMatch) {
         const entry = join(cwd, srcMatch[1]);
         if (existsSync(entry)) return { framework: 'vite', file: entry };

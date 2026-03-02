@@ -1,3 +1,4 @@
+import { init } from './core/engine.js';
 export { init, activate, deactivate, toggle, isActive, setTarget, getTarget } from './core/engine.js';
 export { extractElementMeta, buildLabel, buildContextText, resolveElementMeta } from './core/extract.js';
 export { detectComponent, detectComponentStack, resolveComponentInfo, resolveComponentFrame } from './core/frameworks.js';
@@ -14,3 +15,7 @@ export type {
   ComponentInfo,
   ComponentFrame,
 } from './core/types.js';
+
+// Auto-initialize when imported as a side effect (e.g. `import 'rune-grab'`)
+// Users can still call init() with custom config if needed — it's a no-op if already initialized.
+init();
