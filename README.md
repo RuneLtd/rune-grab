@@ -1,8 +1,7 @@
-<p align="center">
-  <img src="public/rune-grab-logo.png" alt="rune-grab" width="80" />
-</p>
-
-<h1 align="center">Rune Grab</h1>
+<h1 align="center">
+  <img src="public/rune-grab-logo.png" alt="" width="36" style="vertical-align: middle;" />
+  Rune Grab
+</h1>
 
 <p align="center">
   Point at any element. Get the component, file path, and line number. Send it to your AI tool.
