@@ -28,6 +28,24 @@ function isUsefulName(name: string, filePath: string | null, customSkip?: Set<st
   return true;
 }
 
+/** Check name quality only — ignores file path. Used for fallback detection. */
+function isCleanComponentName(name: string, customSkip?: Set<string>): boolean {
+  if (!name || name.length <= 1) return false;
+  if (customSkip?.has(name)) return false;
+  if (name[0] !== name[0].toUpperCase()) return false;
+  for (const pfx of SKIP_PREFIXES) {
+    if (name.startsWith(pfx)) return false;
+  }
+  if (/^[A-Z][a-zA-Z]+\d+$/.test(name)) return false;
+  return true;
+}
+
+/** Detect infrastructure components (providers, wrappers, boundaries) that are
+ *  poor candidates for describing a UI element. */
+function isInfraName(name: string): boolean {
+  return /(?:Provider|Context|Consumer|Boundary|Wrapper|Root|Layout|Suspense)$/i.test(name);
+}
+
 function cleanFilePath(raw: string): string {
   return raw
     .replace(/^https?:\/\/[^/]+\//, '')
@@ -128,13 +146,34 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
   const elementSrc = getSourceFromFiber(fiber);
   let isFirst = true;
 
+  // Fallback: first component with a clean name but no user-source filePath.
+  // Prefer this over infrastructure components like providers/wrappers.
+  let fallback: { info: ComponentInfo; src: SourceLoc | null } | null = null;
+
   let cur = fiber;
   while (cur) {
+    let name: string | null = null;
+    let src: SourceLoc | null = null;
+
     if (cur.type && typeof cur.type === 'function') {
-      const name = cur.type.displayName || cur.type.name;
-      const src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+      name = cur.type.displayName || cur.type.name;
+      src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+    } else if (cur.type?.$$typeof) {
+      // forwardRef/memo: displayName lives on the wrapper, not the inner fn
+      const inner = cur.type.render || cur.type.type;
+      name = cur.type.displayName
+        || (inner && typeof inner === 'function' ? (inner.displayName || inner.name) : null)
+        || null;
+      if (name) {
+        src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
+      }
+    }
+
+    if (name) {
       const filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
-      if (name && filePath && isUsefulName(name, filePath, customSkip)) {
+
+      // Best case: user component with source in project files
+      if (filePath && isUsefulName(name, filePath, customSkip)) {
         const info: ComponentInfo = {
           name,
           filePath,
@@ -144,29 +183,30 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
         if (src) storePendingResolution(info, src);
         return info;
       }
+
+      // Track first non-infra component as fallback (e.g. Heading, Text, Box
+      // from Chakra that lack _debugSource when rendered from server components).
+      // Strip bundle-artifact paths — source map resolution may fill in the real path later.
+      if (!fallback && isCleanComponentName(name, customSkip) && !isInfraName(name)) {
+        const validPath = filePath && isSourceFile(filePath) ? filePath : null;
+        fallback = {
+          info: { name, filePath: validPath, line: validPath ? (src?.lineNumber ?? null) : null, column: validPath ? (src?.columnNumber ?? null) : null },
+          src: src || null,
+        };
+      }
+
       isFirst = false;
     }
-    if (cur.type?.$$typeof) {
-      const inner = cur.type.render || cur.type.type;
-      if (inner && typeof inner === 'function') {
-        const name = inner.displayName || inner.name;
-        const src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
-        const filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
-        if (name && filePath && isUsefulName(name, filePath, customSkip)) {
-          const info: ComponentInfo = {
-            name,
-            filePath,
-            line: src?.lineNumber ?? null,
-            column: src?.columnNumber ?? null,
-          };
-          if (src) storePendingResolution(info, src);
-          return info;
-        }
-        isFirst = false;
-      }
-    }
+
     cur = cur.return;
   }
+
+  // No user component found — return the closest meaningful library component
+  if (fallback) {
+    if (fallback.src) storePendingResolution(fallback.info, fallback.src);
+    return fallback.info;
+  }
+
   return null;
 }
 
@@ -177,7 +217,9 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
   const elementSrc = getSourceFromFiber(fiber);
 
   const stack: ComponentFrame[] = [];
+  const fallbackStack: ComponentFrame[] = [];
   const seen = new Set<string>();
+  const fallbackSeen = new Set<string>();
   let cur = fiber;
   let isFirst = true;
 
@@ -189,24 +231,48 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
       name = cur.type.displayName || cur.type.name;
       src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
     } else if (cur.type?.$$typeof) {
+      // forwardRef/memo: displayName lives on the wrapper, not the inner fn
       const inner = cur.type.render || cur.type.type;
-      if (inner && typeof inner === 'function') {
-        name = inner.displayName || inner.name;
+      name = cur.type.displayName
+        || (inner && typeof inner === 'function' ? (inner.displayName || inner.name) : null)
+        || null;
+      if (name) {
         src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
       }
     }
 
-    let filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
-    if (name && filePath && isUsefulName(name, filePath, customSkip) && !seen.has(name)) {
-      seen.add(name);
-      const frame: ComponentFrame = { name, filePath, line: src?.lineNumber ?? null };
-      if (src) storePendingResolution(frame, src);
-      stack.push(frame);
-      isFirst = false;
+    if (name) {
+      let filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
+
+      // Best case: user component with source in project files
+      if (filePath && isUsefulName(name, filePath, customSkip) && !seen.has(name)) {
+        seen.add(name);
+        const frame: ComponentFrame = { name, filePath, line: src?.lineNumber ?? null };
+        if (src) storePendingResolution(frame, src);
+        stack.push(frame);
+        isFirst = false;
+      }
+      // Track non-infra library components as fallback candidates.
+      // Strip bundle-artifact paths — source map resolution may fill in the real path later.
+      else if (
+        fallbackStack.length < maxDepth &&
+        isCleanComponentName(name, customSkip) &&
+        !isInfraName(name) &&
+        !fallbackSeen.has(name)
+      ) {
+        fallbackSeen.add(name);
+        const validPath = filePath && isSourceFile(filePath) ? filePath : null;
+        const frame: ComponentFrame = { name, filePath: validPath, line: validPath ? (src?.lineNumber ?? null) : null };
+        if (src) storePendingResolution(frame, src);
+        fallbackStack.push(frame);
+      }
     }
+
     cur = cur.return;
   }
-  return stack;
+
+  // If no user components found, use library component fallbacks
+  return stack.length > 0 ? stack : fallbackStack;
 }
 
 function getVueComponentInfo(el: Element): ComponentInfo | null {

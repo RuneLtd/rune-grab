@@ -8,6 +8,10 @@ export function isSourceFile(filePath: string): boolean {
   if (!filePath) return false;
   if (isLibraryFile(filePath)) return false;
   if (filePath.startsWith('webpack-internal:///node_modules/')) return false;
+  // Filter Next.js/Vite/webpack bundle artifacts
+  if (filePath.includes('_next/static/')) return false;
+  if (filePath.includes('.vite/deps/')) return false;
+  if (/^webpack[\w-]*\.js$/.test(filePath) || /[\\/]webpack[\w-]*\.js$/.test(filePath)) return false;
   return true;
 }
 
