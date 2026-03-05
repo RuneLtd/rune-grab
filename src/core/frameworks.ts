@@ -148,7 +148,7 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
 
   // Fallback: first component with a clean name but no user-source filePath.
   // Prefer this over infrastructure components like providers/wrappers.
-  let fallback: { info: ComponentInfo; src: SourceLoc | null } | null = null;
+  let fallback: ComponentInfo | null = null;
 
   let cur = fiber;
   while (cur) {
@@ -186,12 +186,14 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
 
       // Track first non-infra component as fallback (e.g. Heading, Text, Box
       // from Chakra that lack _debugSource when rendered from server components).
-      // Strip bundle-artifact paths — source map resolution may fill in the real path later.
+      // No source/line for fallbacks — the fiber debug info points to library
+      // internals, not the user's JSX call site.
       if (!fallback && isCleanComponentName(name, customSkip) && !isInfraName(name)) {
-        const validPath = filePath && isSourceFile(filePath) ? filePath : null;
         fallback = {
-          info: { name, filePath: validPath, line: validPath ? (src?.lineNumber ?? null) : null, column: validPath ? (src?.columnNumber ?? null) : null },
-          src: src || null,
+          name,
+          filePath: null,
+          line: null,
+          column: null,
         };
       }
 
@@ -201,10 +203,11 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
     cur = cur.return;
   }
 
-  // No user component found — return the closest meaningful library component
+  // No user component found — return the closest meaningful library component.
+  // storePendingResolution was already called when the fallback was created,
+  // so source map resolution will update the path if possible.
   if (fallback) {
-    if (fallback.src) storePendingResolution(fallback.info, fallback.src);
-    return fallback.info;
+    return fallback;
   }
 
   return null;
@@ -253,7 +256,7 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
         isFirst = false;
       }
       // Track non-infra library components as fallback candidates.
-      // Strip bundle-artifact paths — source map resolution may fill in the real path later.
+      // No source/line — fiber debug info is unreliable for library components.
       else if (
         fallbackStack.length < maxDepth &&
         isCleanComponentName(name, customSkip) &&
@@ -261,17 +264,18 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
         !fallbackSeen.has(name)
       ) {
         fallbackSeen.add(name);
-        const validPath = filePath && isSourceFile(filePath) ? filePath : null;
-        const frame: ComponentFrame = { name, filePath: validPath, line: validPath ? (src?.lineNumber ?? null) : null };
-        if (src) storePendingResolution(frame, src);
-        fallbackStack.push(frame);
+        fallbackStack.push({ name, filePath: null, line: null });
       }
     }
 
     cur = cur.return;
   }
 
-  // If no user components found, use library component fallbacks
+  // Prefer fallback (e.g. Heading, Text) over a stack that only contains
+  // infrastructure components (e.g. ChakraProvider).
+  if (fallbackStack.length > 0 && stack.every(f => isInfraName(f.name))) {
+    return fallbackStack;
+  }
   return stack.length > 0 ? stack : fallbackStack;
 }
 
@@ -342,10 +346,12 @@ export async function resolveComponentInfo(info: ComponentInfo): Promise<void> {
 
   const resolved = await resolveOriginalPosition(pending.url, pending.line, pending.col);
   if (resolved) {
-    info.line = resolved.line;
-    info.column = resolved.column;
-    if (resolved.source) {
-      info.filePath = cleanFilePath(resolved.source);
+    const resolvedPath = resolved.source ? cleanFilePath(resolved.source) : null;
+    // Discard resolution if it landed in library code (e.g. Chakra source)
+    if (resolvedPath && isSourceFile(resolvedPath)) {
+      info.line = resolved.line;
+      info.column = resolved.column;
+      info.filePath = resolvedPath;
     }
   }
   pendingResolution.delete(info);
@@ -358,9 +364,11 @@ export async function resolveComponentFrame(frame: ComponentFrame): Promise<void
 
   const resolved = await resolveOriginalPosition(pending.url, pending.line, pending.col);
   if (resolved) {
-    frame.line = resolved.line;
-    if (resolved.source) {
-      frame.filePath = cleanFilePath(resolved.source);
+    const resolvedPath = resolved.source ? cleanFilePath(resolved.source) : null;
+    // Discard resolution if it landed in library code (e.g. Chakra source)
+    if (resolvedPath && isSourceFile(resolvedPath)) {
+      frame.line = resolved.line;
+      frame.filePath = resolvedPath;
     }
   }
   pendingResolution.delete(frame);
