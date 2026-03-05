@@ -10,8 +10,7 @@
 <p align="center">
   <a href="https://www.npmjs.com/package/rune-grab"><img src="https://img.shields.io/npm/v/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="npm version" /></a>
   <a href="https://www.npmjs.com/package/rune-grab"><img src="https://img.shields.io/npm/dm/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="downloads" /></a>
-  <a href="https://bundlephobia.com/package/rune-grab"><img src="https://img.shields.io/bundlephobia/minzip/rune-grab?color=161b22&labelColor=0d1117&style=flat-square&label=gzip" alt="gzip size" /></a>
-  <a href="https://github.com/YOUR_USERNAME/rune-grab/blob/main/LICENSE"><img src="https://img.shields.io/npm/l/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="license" /></a>
+  <a href="https://github.com/RuneLtd/rune-grab?tab=MIT-1-ov-file"><img src="https://img.shields.io/npm/l/rune-grab?color=161b22&labelColor=0d1117&style=flat-square" alt="license" /></a>
 </p>
 
 <p align="center">
