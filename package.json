@@ -1,6 +1,6 @@
 {
   "name": "rune-grab",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Point at any UI element, grab its context, and send it to Claude, Cursor, Codex, or Claude Code — works with any framework.",
   "type": "module",
   "main": "dist/rune-grab.cjs",
