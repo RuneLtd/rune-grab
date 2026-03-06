@@ -23,7 +23,7 @@ export function createGrabOverlay(): void {
 
   s.overlay = document.createElement('div');
   s.overlay.id = '__rune-grab-overlay__';
-  s.overlay.style.cssText = `position:fixed;pointer-events:none;z-index:${Z_OVERLAY};border:1px dashed ${M_BG};background:transparent;border-radius:3px;transition:all 0.08s ease-out;display:none;top:0;left:0;width:0;height:0;`;
+  s.overlay.style.cssText = `position:fixed;pointer-events:none;z-index:${Z_OVERLAY};border:1px dashed #737373;background:transparent;border-radius:3px;transition:all 0.08s ease-out;display:none;top:0;left:0;width:0;height:0;`;
 
   s.label = document.createElement('div');
   s.label.id = '__rune-grab-label__';
@@ -60,7 +60,7 @@ export function createSelectionBox(): void {
   s.selectionBox.id = '__rune-grab-selection__';
   s.selectionBox.style.cssText = `
     position:fixed;z-index:${Z_OVERLAY};
-    border:1px dashed ${M_BG};
+    border:1px dashed #737373;
     background:transparent;
     border-radius:2px;display:none;
     pointer-events:none;
