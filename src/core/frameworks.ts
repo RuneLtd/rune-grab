@@ -28,7 +28,6 @@ function isUsefulName(name: string, filePath: string | null, customSkip?: Set<st
   return true;
 }
 
-/** Check name quality only — ignores file path. Used for fallback detection. */
 function isCleanComponentName(name: string, customSkip?: Set<string>): boolean {
   if (!name || name.length <= 1) return false;
   if (customSkip?.has(name)) return false;
@@ -40,8 +39,6 @@ function isCleanComponentName(name: string, customSkip?: Set<string>): boolean {
   return true;
 }
 
-/** Detect infrastructure components (providers, wrappers, boundaries) that are
- *  poor candidates for describing a UI element. */
 function isInfraName(name: string): boolean {
   return /(?:Provider|Context|Consumer|Boundary|Wrapper|Root|Layout|Suspense)$/i.test(name);
 }
@@ -145,11 +142,7 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
 
   const elementSrc = getSourceFromFiber(fiber);
   let isFirst = true;
-
-  // Fallback: first component with a clean name but no user-source filePath.
-  // Prefer this over infrastructure components like providers/wrappers.
   let fallback: ComponentInfo | null = null;
-
   let cur = fiber;
   while (cur) {
     let name: string | null = null;
@@ -159,7 +152,6 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
       name = cur.type.displayName || cur.type.name;
       src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
     } else if (cur.type?.$$typeof) {
-      // forwardRef/memo: displayName lives on the wrapper, not the inner fn
       const inner = cur.type.render || cur.type.type;
       name = cur.type.displayName
         || (inner && typeof inner === 'function' ? (inner.displayName || inner.name) : null)
@@ -172,7 +164,6 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
     if (name) {
       const filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
 
-      // Best case: user component with source in project files
       if (filePath && isUsefulName(name, filePath, customSkip)) {
         const info: ComponentInfo = {
           name,
@@ -184,10 +175,6 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
         return info;
       }
 
-      // Track first non-infra component as fallback (e.g. Heading, Text, Box
-      // from Chakra that lack _debugSource when rendered from server components).
-      // No source/line for fallbacks — the fiber debug info points to library
-      // internals, not the user's JSX call site.
       if (!fallback && isCleanComponentName(name, customSkip) && !isInfraName(name)) {
         fallback = {
           name,
@@ -203,9 +190,6 @@ function getReactComponentInfo(el: Element, customSkip?: Set<string>): Component
     cur = cur.return;
   }
 
-  // No user component found — return the closest meaningful library component.
-  // storePendingResolution was already called when the fallback was created,
-  // so source map resolution will update the path if possible.
   if (fallback) {
     return fallback;
   }
@@ -234,7 +218,6 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
       name = cur.type.displayName || cur.type.name;
       src = isFirst && elementSrc ? elementSrc : getSourceFromFiber(cur);
     } else if (cur.type?.$$typeof) {
-      // forwardRef/memo: displayName lives on the wrapper, not the inner fn
       const inner = cur.type.render || cur.type.type;
       name = cur.type.displayName
         || (inner && typeof inner === 'function' ? (inner.displayName || inner.name) : null)
@@ -247,7 +230,6 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
     if (name) {
       let filePath = src?.fileName ? cleanFilePath(src.fileName) : null;
 
-      // Best case: user component with source in project files
       if (filePath && isUsefulName(name, filePath, customSkip) && !seen.has(name)) {
         seen.add(name);
         const frame: ComponentFrame = { name, filePath, line: src?.lineNumber ?? null };
@@ -255,8 +237,6 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
         stack.push(frame);
         isFirst = false;
       }
-      // Track non-infra library components as fallback candidates.
-      // No source/line — fiber debug info is unreliable for library components.
       else if (
         fallbackStack.length < maxDepth &&
         isCleanComponentName(name, customSkip) &&
@@ -271,8 +251,6 @@ function getReactComponentStack(el: Element, maxDepth = 6, customSkip?: Set<stri
     cur = cur.return;
   }
 
-  // Prefer fallback (e.g. Heading, Text) over a stack that only contains
-  // infrastructure components (e.g. ChakraProvider).
   if (fallbackStack.length > 0 && stack.every(f => isInfraName(f.name))) {
     return fallbackStack;
   }
@@ -347,7 +325,6 @@ export async function resolveComponentInfo(info: ComponentInfo): Promise<void> {
   const resolved = await resolveOriginalPosition(pending.url, pending.line, pending.col);
   if (resolved) {
     const resolvedPath = resolved.source ? cleanFilePath(resolved.source) : null;
-    // Discard resolution if it landed in library code (e.g. Chakra source)
     if (resolvedPath && isSourceFile(resolvedPath)) {
       info.line = resolved.line;
       info.column = resolved.column;
@@ -365,7 +342,6 @@ export async function resolveComponentFrame(frame: ComponentFrame): Promise<void
   const resolved = await resolveOriginalPosition(pending.url, pending.line, pending.col);
   if (resolved) {
     const resolvedPath = resolved.source ? cleanFilePath(resolved.source) : null;
-    // Discard resolution if it landed in library code (e.g. Chakra source)
     if (resolvedPath && isSourceFile(resolvedPath)) {
       frame.line = resolved.line;
       frame.filePath = resolvedPath;

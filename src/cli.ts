@@ -188,7 +188,6 @@ function initCommand(): void {
       }
     }
   } catch {
-    // ignore
   }
 
   console.log('');

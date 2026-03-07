@@ -8,7 +8,6 @@ export function isSourceFile(filePath: string): boolean {
   if (!filePath) return false;
   if (isLibraryFile(filePath)) return false;
   if (filePath.startsWith('webpack-internal:///node_modules/')) return false;
-  // Filter webpack/Vite runtime files (NOT compiled user chunks — those have useful source maps)
   if (/(?:^|[\\/])webpack(?:[-.][\w]+)?\.js$/.test(filePath)) return false;
   if (/(?:^|[\\/])framework[-.][\w]+\.js$/.test(filePath)) return false;
   return true;

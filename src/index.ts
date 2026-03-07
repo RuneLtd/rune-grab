@@ -16,6 +16,4 @@ export type {
   ComponentFrame,
 } from './core/types.js';
 
-// Auto-initialize when imported as a side effect (e.g. `import 'rune-grab'`)
-// Users can still call init() with custom config if needed — it's a no-op if already initialized.
 init();
